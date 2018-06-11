@@ -1,0 +1,398 @@
+﻿<!DOCTYPE html>
+<html lang=ko>
+<head>
+<meta charset=utf-8>
+<title>지뢰찾기(React)</title>
+<script crossorigin src="https://unpkg.com/react@16/umd/react.development.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@16/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+<style>
+body {
+    font: 14px "Century Gothic", Futura, sans-serif;
+    margin: 20px;
+  }
+  
+  ol, ul {
+    padding-left: 30px;
+  }
+  
+  .board-row:after {
+    clear: both;
+    content: "";
+    display: table;
+  }
+  
+  .status {
+    margin-bottom: 10px;
+  }
+  
+  .square {
+    background: #fff;
+    border: 1px solid #999;
+    float: left;
+    font-size: 24px;
+    font-weight: bold;
+    line-height: 34px;
+    height: 34px;
+    margin-right: -1px;
+    margin-top: -1px;
+    padding: 0;
+    text-align: center;
+    width: 34px;
+  }
+  
+  .square:focus {
+    outline: none;
+  }
+  
+  .kbd-navigation .square:focus {
+    background: #ddd;
+  }
+  
+  .game {
+    display: flex;
+    flex-direction: row;
+    width: 1200px;
+  }
+  
+  .game-info {
+    margin-left: 20px;
+  }
+</style>
+<body>
+<div id=root></div>
+<script type="text/babel">
+class Box extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      value: 0,
+      isMarked: false,
+      isBomb: false,
+      display: '○'
+    }
+    this.isClicked = false;
+    this.init = this.init.bind(this);
+    this.onClick = this.onClick.bind(this);
+    this.onDoubleClick = this.onDoubleClick.bind(this);
+    this.checkBombPlanted = this.checkBombPlanted.bind(this);
+    this.markBombToggle = this.markBombToggle.bind(this);
+    this.plantBomb = this.plantBomb.bind(this);
+  }
+  init() {
+    this.setState({
+      value: 0,
+      isMarked: false,
+      isBomb: false,
+      display: '○'
+    });
+    this.isClicked = false;
+  }
+  onClick(e, isPassive) {
+    if (this.isClicked == false && this.state.isMarked == false) {
+      this.isClicked = true;
+      this.props.checkBoxOpened(isPassive);
+      if (this.state.isBomb) {
+        if (isPassive) {
+          this.setState({display: '●'});
+        } else {
+          this.setState({display: 'X'});
+        }
+        this.props.explode(isPassive);
+      } else {
+        const aroundBombs = this.props.checkAround(this.props.rowIndex, this.props.colIndex);
+        this.setState({
+          value: aroundBombs,
+          display: aroundBombs == 0 ? '':aroundBombs
+        });
+        if (aroundBombs == 0) {
+          this.props.clickAround(this.props.rowIndex, this.props.colIndex, true);
+        }
+      }
+    }
+  }
+  onDoubleClick(e) {
+    if (this.isClicked && this.state.isMarked == false) {
+      const aroundMarks = this.props.checkAroundMarks(this.props.rowIndex, this.props.colIndex);
+      if (aroundMarks == this.state.value) {
+        this.props.clickAround(this.props.rowIndex, this.props.colIndex, false);
+      }
+    }
+  }
+  checkBombPlanted() {
+    return this.state.isBomb;
+  }
+  checkBombMarked() {
+    return this.state.isMarked;
+  }
+  markBombToggle(e) {
+    e.preventDefault();
+    if (this.isClicked == false) {
+      if (this.state.isMarked) {
+        this.setState({display: '○'});
+      } else {
+        this.setState({display: '▲'});
+      }
+      this.setState(prevState => ({
+        isMarked: !prevState.isMarked
+      }));
+    }
+  }
+  plantBomb() {
+    if (this.state.isBomb == false) {
+      this.setState({isBomb: true});
+      return true;
+    }
+    return false;
+  }
+  render() {
+    return (
+      <button className="square" onClick={this.onClick}
+          onDoubleClick={this.onDoubleClick}
+          onContextMenu={this.markBombToggle}>
+        {this.state.display}
+      </button>
+    );
+  }
+}
+
+class Row extends React.Component {
+  constructor(props) {
+    super(props);
+    this.refBoxes = Array(this.props.size).fill(null);
+    this.plantBomb = this.plantBomb.bind(this);
+    this.checkNear = this.checkNear.bind(this);
+    this.checkNearMarked = this.checkNearMarked.bind(this);
+  }
+  initAll() {
+    for (let i = 0; i < this.props.size; i++) {
+      this.refBoxes[i].current.init();
+    }
+  }
+  plantBomb() {
+    let r = Math.floor(Math.random() * this.props.size);
+    return this.refBoxes[r].current.plantBomb();
+  }
+  checkNear(pos) {
+    let numberOfBombs = 0;
+    for (let i = pos-1; i <= pos+1; i++) {
+      if (i >= 0 && i < this.props.size) {
+        numberOfBombs += this.refBoxes[i].current.checkBombPlanted() ? 1:0;
+      }
+    }
+    return numberOfBombs;
+  }
+  checkNearMarked(pos) {
+    let numberOfMarks = 0;
+    for (let i = pos-1; i <= pos+1; i++) {
+      if (i >= 0 && i < this.props.size) {
+        numberOfMarks += this.refBoxes[i].current.checkBombMarked() ? 1:0;
+      }
+    }
+    return numberOfMarks;
+  }
+  clickNear(pos, isPassive) {
+    for (let i = pos-1; i <= pos+1; i++) {
+      if (i >= 0 && i < this.props.size) {
+        this.refBoxes[i].current.onClick(null, isPassive);
+      }
+    }
+  }
+  clickAll() {
+    for (let i = 0; i < this.props.size; i++) {
+        this.refBoxes[i].current.onClick(null, true);
+    }
+  }
+  render() {
+    let boxes = [];
+    for (let i = 0; i < this.props.size; i++) {
+      this.refBoxes[i] = React.createRef();
+      boxes.push(
+        <Box
+          key={i}
+          ref={this.refBoxes[i]}
+          rowIndex={this.props.rowIndex}
+          colIndex={i}
+          checkAround={this.props.checkAround}
+          clickAround={this.props.clickAround}
+          explode={this.props.explode}
+          checkBoxOpened={this.props.checkBoxOpened}
+          checkAroundMarks={this.props.checkAroundMarks}
+        />
+      );
+    }
+    return (
+      <div className="board-row">{boxes}</div>
+    );
+  }
+}
+
+class Board extends React.Component {
+  constructor(props) {
+    super(props);
+    this.isEnd = false;
+    this.numberOfOpenedBoxes = 0;
+    this.numberOfPlantedBombs = 0;
+    this.refRows = Array(this.props.rowSize).fill(null);
+    this.plantBombs = this.plantBombs.bind(this);
+    this.checkAround = this.checkAround.bind(this);
+    this.clickAround = this.clickAround.bind(this);
+    this.checkAroundMarks = this.checkAroundMarks.bind(this);
+    this.explode = this.explode.bind(this);
+    this.checkBoxOpened = this.checkBoxOpened.bind(this);
+  }
+  plantBombs() {
+    this.numberOfPlantedBombs = 0;
+    while (this.props.numberOfBombs > this.numberOfPlantedBombs) {
+      let r = Math.floor(Math.random() * this.props.rowSize);
+      let isPlanted = this.refRows[r].current.plantBomb();
+      if (isPlanted) {
+        this.numberOfPlantedBombs += 1;
+      }
+    }
+  }
+  checkAround(rowIndex, colIndex) {
+    let nearBombs = 0;
+    for (let i = rowIndex-1; i <= rowIndex+1; i++) {
+      if (i >= 0 && i < this.props.rowSize) {
+        nearBombs += this.refRows[i].current.checkNear(colIndex);
+      }
+    }
+    return nearBombs;
+  }
+  checkAroundMarks(rowIndex, colIndex) {
+    let nearMarks = 0;
+    for (let i = rowIndex-1; i <= rowIndex+1; i++) {
+      if (i >= 0 && i < this.props.rowSize) {
+        nearMarks += this.refRows[i].current.checkNearMarked(colIndex);
+      }
+    }
+    return nearMarks;
+  }
+  clickAround(rowIndex, colIndex, isPassive) {
+    for (let i = rowIndex-1; i <= rowIndex+1; i++) {
+      if (i >= 0 && i < this.props.rowSize) {
+        this.refRows[i].current.clickNear(colIndex, isPassive);
+      }
+    }
+  }
+  explode(isPassive) {
+    this.isEnd = true;
+    for (let i = 0; i < this.props.rowSize; i++) {
+      this.refRows[i].current.clickAll();
+    }
+    if (isPassive == undefined || isPassive == false) {
+      setTimeout(() => alert('You Lose!'), 200);
+    }
+  }
+  initAll() {
+    this.isEnd = false;
+    this.numberOfOpenedBoxes = 0;
+    for (let i = 0; i < this.props.rowSize; i++) {
+      this.refRows[i].current.initAll();
+    }
+    this.plantBombs();
+  }
+  checkBoxOpened() {
+    this.numberOfOpenedBoxes += 1;
+    if (this.props.rowSize * this.props.colSize ==
+        (this.numberOfPlantedBombs + this.numberOfOpenedBoxes) &&
+        this.isEnd == false) {
+      for (let i = 0; i < this.props.rowSize; i++) {
+        this.refRows[i].current.clickAll();
+      }
+      setTimeout(() => alert('You Win!'), 200);
+    }
+  }
+  componentDidMount() {
+    this.plantBombs();
+  }
+  render() {
+    let rows = [];
+    for (let i = 0; i < this.props.rowSize; i++) {
+      this.refRows[i] = React.createRef();
+      rows.push(
+        <Row
+          rowIndex={i}
+          key={i}
+          ref={this.refRows[i]}
+          size={this.props.colSize}
+          checkAround={this.checkAround}
+          clickAround={this.clickAround}
+          explode={this.explode}
+          initAll={this.initAll}
+          checkBoxOpened={this.checkBoxOpened}
+          checkAroundMarks={this.checkAroundMarks}
+        />
+      );
+    }
+    return (
+      <div>{rows}</div>
+    );
+  }
+}
+
+class Game extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      boardId: 1
+    }
+    this.numberOfBombs = 10;
+    this.rowSize = 9;
+    this.colSize = 9;
+    this.refBoard = React.createRef();
+    this.init = this.init.bind(this);
+    this.changeLevel = this.changeLevel.bind(this);
+  }
+  init() {
+    this.refBoard.current.initAll();
+  }
+  changeLevel(e) {
+    if (e.target.value == 1) {
+      this.numberOfBombs = 10;
+      this.rowSize = 9;
+      this.colSize = 9;
+    } else if (e.target.value == 2) {
+      this.numberOfBombs = 40;
+      this.rowSize = 16;
+      this.colSize = 16;
+    } else if (e.target.value == 3) {
+      this.numberOfBombs = 99;
+      this.rowSize = 16;
+      this.colSize = 30;
+    }
+    this.setState(prevState => ({boardId: prevState.boardId + 1}));
+    this.init();
+  }
+  render() {
+    return (
+      <div className="game">
+        <div className="game-board">
+          <Board
+            key={this.state.boardId}
+            ref={this.refBoard}
+            numberOfBombs={this.numberOfBombs}
+            rowSize={this.rowSize}
+            colSize={this.colSize}
+          />
+        </div>
+        <div className="game-info">
+          <div>
+            <select onChange={this.changeLevel}>
+              <option value="1">초급</option>
+              <option value="2">중급</option>
+              <option value="3">고급</option>
+            </select>
+          </div>
+          <div><button onClick={this.init}>재시작</button></div>
+        </div>
+      </div>
+    );
+  }
+}
+
+ReactDOM.render(<Game />, document.getElementById("root"));
+</script>
+</body>
+</html>
